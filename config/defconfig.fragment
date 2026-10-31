@@ -5,6 +5,10 @@ BR2_BACKUP_SITE="https://sources.buildroot.net"
 # Keep compiler caching disabled, as in the current Triple Re configuration.
 # BR2_CCACHE is not set
 
+# No Mesa 3D / LLVM: the wipe screens are text mode (kernel KMS/framebuffer), and
+# building LLVM + Clang alone took ~3 hours, past the CI job time limit.
+# BR2_PACKAGE_MESA3D is not set
+
 # Wi-Fi: wpa_supplicant + iw + regulatory database
 BR2_PACKAGE_WPA_SUPPLICANT=y
 BR2_PACKAGE_WPA_SUPPLICANT_NL80211=y
