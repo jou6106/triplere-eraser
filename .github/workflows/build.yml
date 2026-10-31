@@ -52,13 +52,6 @@ jobs:
           key: dl-${{ env.SHREDOS_COMMIT }}-${{ hashFiles('triplere/config/*') }}
           restore-keys: dl-${{ env.SHREDOS_COMMIT }}-
 
-      - name: Restore compiler cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.buildroot-ccache
-          key: ccache-${{ env.SHREDOS_COMMIT }}-${{ github.run_id }}
-          restore-keys: ccache-${{ env.SHREDOS_COMMIT }}-
-
       - name: Apply Triple Re changes
         run: bash triplere/apply.sh shredos
 

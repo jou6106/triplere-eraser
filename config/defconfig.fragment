@@ -2,10 +2,6 @@
 # If an upstream download site fails, fetch the same file from the Buildroot mirror
 BR2_BACKUP_SITE="https://sources.buildroot.net"
 
-# Build cache between CI runs
-BR2_CCACHE=y
-BR2_CCACHE_DIR="$(HOME)/.buildroot-ccache"
-
 # Wi-Fi: wpa_supplicant + iw + regulatory database
 BR2_PACKAGE_WPA_SUPPLICANT=y
 BR2_PACKAGE_WPA_SUPPLICANT_NL80211=y

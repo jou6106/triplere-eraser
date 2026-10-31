@@ -13,7 +13,7 @@ nwipe نفسه (المسح) ما اتعدّلش.
 
 ## البناء
 
-البناء بيحصل أوتوماتيك على GitHub Actions مع كل push على `main` (أو يدوي من تبويب **Actions** ← **Build Triple Re Eraser** ← **Run workflow**). بياخد من ساعتين لـ 5 ساعات أول مرة، وأسرع بعد كده بسبب الـ cache.
+البناء بيحصل أوتوماتيك على GitHub Actions مع كل push على `main` (أو يدوي من تبويب **Actions** ← **Build Triple Re Eraser** ← **Run workflow**). بياخد من ساعتين لـ 5 ساعات (الملفات المتنزّلة بتتحفظ في cache فالمرات الجاية أسرع شوية).
 
 الملف الجاهز: تبويب **Actions** ← آخر Run ناجح ← **Artifacts** ← `triplere-eraser-img`.
 
