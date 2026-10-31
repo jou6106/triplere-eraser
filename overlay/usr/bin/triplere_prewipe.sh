@@ -18,6 +18,9 @@ DHCP_PID=/tmp/triplere_udhcpc.pid
 BACKTITLE="Triple Re Eraser  |  NIST SP 800-88  |  nwipe / ShredOS"
 MENU_TIMEOUT=30
 
+# shellcheck source=triplere_license.sh
+. /usr/bin/triplere_license.sh
+
 have_dialog() { command -v dialog >/dev/null 2>&1; }
 
 online() { ip route 2>/dev/null | grep -q '^default'; }
@@ -161,7 +164,7 @@ choose_and_connect() {
     return 0
 }
 
-main() {
+network_step() {
     local iface
     iface=$(wifi_iface)
 
@@ -205,6 +208,49 @@ main() {
     done
 }
 
-main
+# nwipe only starts with a valid licence from the Triple Re ERP. This screen does not
+# time out on purpose: an unlicensed drive waits here until it is activated or powered off.
+license_gate() {
+    local state rc text choice disabled=0
+    while true; do
+        if online; then
+            license_renew
+            rc=$?
+            if [ "$rc" -ne 1 ]; then
+                # Save the renewed (or removed) licence on the USB drive.
+                /usr/bin/archive_log.sh -w >/dev/null 2>&1
+            fi
+            [ "$rc" -eq 2 ] && disabled=1
+        fi
+
+        state=$(license_state)
+        [ "$state" = valid ] && return 0
+
+        case "$state" in
+            expired) text="The licence of this USB drive has expired.\n\nConnect to the internet (cable or Wi-Fi) and choose Retry to renew it." ;;
+            invalid) text="The licence on this USB drive is not valid.\n\nCreate a new key for it in the Triple Re ERP." ;;
+            *)       text="This USB drive is not activated.\n\nCreate a key for it in the Triple Re ERP (Data Erasure Certificates page)\nand copy upload.conf to /etc/triplere/ on the USB drive." ;;
+        esac
+        [ "$disabled" = 1 ] && text="This USB drive has been disabled in the Triple Re ERP.\n\nContact the Triple Re administrator."
+
+        if have_dialog; then
+            choice=$(dialog --backtitle "$BACKTITLE" --title "Licence required" --stdout --no-cancel \
+                --menu "$text" 16 74 3 \
+                1 "Retry" \
+                2 "Connect to Wi-Fi" \
+                3 "Power off") || choice=1
+        else
+            printf '\n%b\n\n1) Retry  2) Connect to Wi-Fi  3) Power off\n> ' "$text"
+            read -r choice
+        fi
+        case "$choice" in
+            2) [ -n "$(wifi_iface)" ] && choose_and_connect "$(wifi_iface)" && sync_clock ;;
+            3) clear; poweroff ;;
+        esac
+    done
+}
+
+network_step
+license_gate
 clear
 exit 0

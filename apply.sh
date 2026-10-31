@@ -31,6 +31,23 @@ echo ">> Triple Re: overlay scripts"
 cp -R "$SRC/overlay/." board/shredos/fsoverlay/
 chmod 0755 board/shredos/fsoverlay/usr/bin/triplere_*.sh board/shredos/fsoverlay/etc/init.d/S95triplere_inventory
 
+echo ">> Triple Re: licence public key"
+# Only the public key goes in the image; licences are signed by the ERP's private key.
+grep -q 'BEGIN PUBLIC KEY' "$SRC/config/license_public.pem"
+mkdir -p board/shredos/fsoverlay/etc/triplere
+cp "$SRC/config/license_public.pem" board/shredos/fsoverlay/etc/triplere/license_public.pem
+
+echo ">> Triple Re: remove the root shell on tty2 (it could start nwipe without a licence)"
+python3 - board/shredos/fsoverlay/etc/inittab <<'PY'
+import sys
+path = sys.argv[1]
+line = "2:3:respawn:/sbin/getty 38400 tty2 -n -l /bin/sh"
+lines = open(path).read().split("\n")
+if lines.count(line) != 1:
+    sys.exit(f"apply.sh: tty2 shell line not found exactly once in {path}")
+open(path, "w").write("\n".join(l for l in lines if l != line))
+PY
+
 echo ">> Triple Re: build options"
 cat "$SRC/config/defconfig.fragment" >> configs/shredos_defconfig
 cp "$SRC/config/busybox.fragment" board/shredos/triplere-busybox.fragment
@@ -58,9 +75,10 @@ if [[ "$mode" == "read" ]] && [ -d "$archive_drive_directory/etc/triplere" ]; th
     cp "$archive_drive_directory"/etc/triplere/*.conf /etc/triplere/ 2>/dev/null
     printf "[`date "$date_format"`] archive_log.sh: Copied Triple Re settings from $drive_partition:/etc/triplere\n" 2>&1 | tee -a transfer.log
 fi
-if [[ "$mode" == "write" ]] && [ -f /etc/triplere/wifi.conf ]; then
+if [[ "$mode" == "write" ]] && ls /etc/triplere/*.conf >/dev/null 2>&1; then
+    # upload.conf (renewed or removed licence) and wifi.conf (saved networks)
     mkdir -p "$archive_drive_directory/etc/triplere"
-    cp /etc/triplere/wifi.conf "$archive_drive_directory/etc/triplere/wifi.conf"
+    cp /etc/triplere/*.conf "$archive_drive_directory/etc/triplere/"
 fi
 BLOCK
 )"

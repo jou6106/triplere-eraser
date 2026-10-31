@@ -75,7 +75,15 @@ jobs:
           exit $missing
 
       - name: Download sources
-        run: cd shredos && make -s source
+        run: |
+          cd shredos
+          # Upstream download sites fail now and then: retry before giving up.
+          for attempt in 1 2 3; do
+            make -s source && exit 0
+            echo "::warning::Download attempt $attempt failed, retrying in 60s"
+            sleep 60
+          done
+          exit 1
 
       - name: Check kernel Wi-Fi options
         run: |

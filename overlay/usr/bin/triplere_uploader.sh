@@ -54,10 +54,9 @@ upload_session() {
             return 0
         fi
     fi
-    ERP_URL=""
-    UPLOAD_TOKEN=""
-    # shellcheck disable=SC1090
-    . "$CONF"
+    # Plain-data read: the file comes from the USB drive and is never executed.
+    ERP_URL=$(sed -n 's/^ERP_URL="\([^"$`\\]*\)"[[:space:]]*$/\1/p' "$CONF" | tail -n 1)
+    UPLOAD_TOKEN=$(sed -n 's/^UPLOAD_TOKEN="\([^"$`\\]*\)"[[:space:]]*$/\1/p' "$CONF" | tail -n 1)
     if [ -z "$ERP_URL" ] || [ -z "$UPLOAD_TOKEN" ]; then
         status "Upload config incomplete - files saved on USB only: $(basename "$log")"
         return 0

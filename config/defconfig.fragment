@@ -1,4 +1,7 @@
 # ---- Triple Re Eraser additions (appended to configs/shredos_defconfig) ----
+# If an upstream download site fails, fetch the same file from the Buildroot mirror
+BR2_BACKUP_SITE="https://sources.buildroot.net"
+
 # Build cache between CI runs
 BR2_CCACHE=y
 BR2_CCACHE_DIR="$(HOME)/.buildroot-ccache"
@@ -20,6 +23,8 @@ BR2_PACKAGE_OPENSSL=y
 BR2_PACKAGE_LIBCURL_CURL=y
 BR2_PACKAGE_LIBCURL_OPENSSL=y
 BR2_PACKAGE_CA_CERTIFICATES=y
+# openssl command: verifies the USB licence signature
+BR2_PACKAGE_LIBOPENSSL_BIN=y
 
 # BusyBox extras: ntpd (clock sync for HTTPS), timeout, rfkill
 BR2_PACKAGE_BUSYBOX_CONFIG_FRAGMENT_FILES="board/shredos/triplere-busybox.fragment"

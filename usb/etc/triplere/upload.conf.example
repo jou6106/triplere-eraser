@@ -1,5 +1,10 @@
-# Copy this file to /etc/triplere/upload.conf on the Triple Re Eraser USB drive
-# and paste the two lines shown when you create a USB key on the ERP page
-# "شهادات مسح البيانات" -> "مفاتيح فلاشات ShredOS".
+# /etc/triplere/upload.conf on the Triple Re Eraser USB drive.
+# Do not write this file by hand: on the ERP page "شهادات مسح البيانات" ->
+# "مفاتيح فلاشات ShredOS" create a key and download upload.conf. It contains the
+# upload key and the signed licence. Without a valid licence the drive does not wipe.
 ERP_URL="https://erp.triplere.net/api/erasure/upload"
-UPLOAD_TOKEN="tre_paste_the_key_from_the_erp_here"
+UPLOAD_TOKEN="tre_..."
+LICENSE_ID="..."
+LICENSE_ISSUED="YYYY-MM-DD"
+LICENSE_EXPIRES="YYYY-MM-DD"
+LICENSE_SIG="..."
