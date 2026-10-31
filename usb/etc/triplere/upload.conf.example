@@ -1,0 +1,5 @@
+# Copy this file to /etc/triplere/upload.conf on the Triple Re Eraser USB drive
+# and paste the two lines shown when you create a USB key on the ERP page
+# "شهادات مسح البيانات" -> "مفاتيح فلاشات ShredOS".
+ERP_URL="https://erp.triplere.net/api/erasure/upload"
+UPLOAD_TOKEN="tre_paste_the_key_from_the_erp_here"

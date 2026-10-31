@@ -1,0 +1,124 @@
+name: Build Triple Re Eraser
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'usb/**']
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    env:
+      # ShredOS v2025.11_32_x86-64_0.43.1 (nwipe 0.43.1) — the release this build is based on.
+      SHREDOS_COMMIT: b2c99419bae6d19247911407d88bcec87c685e5f
+    steps:
+      - name: Checkout Triple Re changes
+        uses: actions/checkout@v4
+        with:
+          path: triplere
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/.ghcup
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+
+      - name: Install build dependencies (from the ShredOS README)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y automake autotools-dev build-essential cpio coreutils dmidecode \
+            dosfstools git libelf-dev libncurses5-dev libparted-dev libssl-dev mtools pkg-config \
+            smartmontools unzip rsync bc file wget python3
+
+      - name: Fetch ShredOS source
+        run: |
+          git init -q shredos
+          cd shredos
+          git remote add origin https://github.com/PartialVolume/shredos.x86_64.git
+          git fetch -q --depth 1 origin "$SHREDOS_COMMIT"
+          git checkout -q FETCH_HEAD
+          mkdir -p package/shredos && touch package/shredos/Config.in
+
+      - name: Restore download cache
+        uses: actions/cache@v4
+        with:
+          path: shredos/dl
+          key: dl-${{ env.SHREDOS_COMMIT }}-${{ hashFiles('triplere/config/*') }}
+          restore-keys: dl-${{ env.SHREDOS_COMMIT }}-
+
+      - name: Restore compiler cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildroot-ccache
+          key: ccache-${{ env.SHREDOS_COMMIT }}-${{ github.run_id }}
+          restore-keys: ccache-${{ env.SHREDOS_COMMIT }}-
+
+      - name: Apply Triple Re changes
+        run: bash triplere/apply.sh shredos
+
+      - name: Configure
+        run: |
+          cd shredos
+          make -s shredos_defconfig
+          # Fail if Buildroot silently dropped any requested option.
+          missing=0
+          while IFS= read -r opt; do
+            case "$opt" in ''|'#'*) continue ;; esac
+            grep -qxF "$opt" .config || { echo "::error::Buildroot option not applied: $opt"; missing=1; }
+          done < ../triplere/config/defconfig.fragment
+          exit $missing
+
+      - name: Download sources
+        run: cd shredos && make -s source
+
+      - name: Check kernel Wi-Fi options
+        run: |
+          cd shredos
+          make -s linux-configure
+          cfg=$(ls -d output/build/linux-*/.config | head -n 1)
+          missing=0
+          for opt in CONFIG_CFG80211=y CONFIG_MAC80211=y CONFIG_IWLWIFI=y CONFIG_IWLMVM=y CONFIG_ATH10K_PCI=y CONFIG_RTW88=y CONFIG_RTW89=y CONFIG_MT7921E=y CONFIG_BRCMFMAC=y; do
+            grep -qxF "$opt" "$cfg" || { echo "::error::Kernel option not applied: $opt"; missing=1; }
+          done
+          grep -E '^CONFIG_(IWLMLD|ATH9K|RTL8XXXU|MT7925E|RTW89_8852BE)=' "$cfg" || true
+          exit $missing
+
+      - name: Build
+        run: |
+          cd shredos
+          set +e
+          make 2>&1 | tee build.log | grep --line-buffered -E '^>>> '
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then tail -n 80 build.log; exit 1; fi
+          ls -la output/images/
+
+      - name: Package image
+        run: |
+          mkdir -p release
+          cp shredos/output/images/shredos*.img release/
+          cd release
+          for f in *.img; do sha256sum "$f" > "$f.sha256"; done
+          ls -la
+
+      - name: Upload image
+        uses: actions/upload-artifact@v4
+        with:
+          name: triplere-eraser-img
+          path: release/
+          retention-days: 30
+          compression-level: 0
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: shredos/build.log
+          retention-days: 7
