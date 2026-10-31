@@ -11,6 +11,9 @@ cd "$SHREDOS"
 
 VERSION="2025.11_32_x86-64_v0.43.1_TripleRe"
 
+echo ">> Triple Re: pinned Buildroot source fixes"
+python3 "$SRC/scripts/fix-buildroot.py" "$SHREDOS"
+
 # Inserts <line> before (or after) the single line equal to <anchor>.
 insert_line() {
     local file="$1" where="$2" anchor="$3" line="$4"

@@ -1,6 +1,9 @@
 # ---- Triple Re Eraser additions (appended to configs/shredos_defconfig) ----
-# If an upstream download site fails, fetch the same file from the Buildroot mirror
+# Prefer hash-checked source archives before contacting upstream Git servers.
+BR2_PRIMARY_SITE="https://sources.buildroot.net"
 BR2_BACKUP_SITE="https://sources.buildroot.net"
+# Keep compiler caching disabled, as in the current Triple Re configuration.
+# BR2_CCACHE is not set
 
 # Wi-Fi: wpa_supplicant + iw + regulatory database
 BR2_PACKAGE_WPA_SUPPLICANT=y

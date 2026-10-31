@@ -46,14 +46,21 @@ jobs:
           mkdir -p package/shredos && touch package/shredos/Config.in
 
       - name: Restore download cache
-        uses: actions/cache@v4
+        id: download-cache
+        uses: actions/cache/restore@v4
         with:
           path: shredos/dl
-          key: dl-${{ env.SHREDOS_COMMIT }}-${{ hashFiles('triplere/config/*') }}
-          restore-keys: dl-${{ env.SHREDOS_COMMIT }}-
+          key: dl-v2-${{ env.SHREDOS_COMMIT }}-${{ hashFiles('triplere/config/*') }}-${{ github.run_id }}
+          restore-keys: |
+            dl-v2-${{ env.SHREDOS_COMMIT }}-${{ hashFiles('triplere/config/*') }}-
+            dl-v2-${{ env.SHREDOS_COMMIT }}-
+            dl-${{ env.SHREDOS_COMMIT }}-
 
       - name: Apply Triple Re changes
         run: bash triplere/apply.sh shredos
+
+      - name: Test source preparation fixes
+        run: python3 -m unittest discover -s triplere/tests -v
 
       - name: Configure
         run: |
@@ -70,13 +77,14 @@ jobs:
       - name: Download sources
         run: |
           cd shredos
-          # Upstream download sites fail now and then: retry before giving up.
-          for attempt in 1 2 3; do
-            make -s source && exit 0
-            echo "::warning::Download attempt $attempt failed, retrying in 60s"
-            sleep 60
-          done
-          exit 1
+          bash ../triplere/scripts/download-sources.sh
+
+      - name: Save downloaded sources even on failure
+        if: ${{ !cancelled() && steps.download-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: shredos/dl
+          key: ${{ steps.download-cache.outputs.cache-primary-key }}
 
       - name: Check kernel Wi-Fi options
         run: |
@@ -121,5 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: shredos/build.log
+          path: |
+            shredos/build.log
+            shredos/download-attempt-*.log
           retention-days: 7
