@@ -126,7 +126,8 @@ jobs:
           name: triplere-eraser-img
           path: release/
           retention-days: 30
-          compression-level: 0
+          # The image now carries ~2 GB of empty space for reports; it zips down to almost nothing.
+          compression-level: 6
 
       - name: Upload build log on failure
         if: failure()

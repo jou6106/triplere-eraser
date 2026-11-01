@@ -63,6 +63,13 @@ printf '%s\n' "$VERSION" > board/shredos/fsoverlay/etc/shredos/version.txt
 grep -q 'ShredOS v\$version' package/nwipe/002-nwipe-banner-patch.sh
 sed -i 's/ShredOS v\$version/Triple Re Eraser - ShredOS v$version/' package/nwipe/002-nwipe-banner-patch.sh
 
+echo ">> Triple Re: room for reports on the USB drive"
+# ShredOS sizes the FAT partition as bzImage + 20 MB. With the Wi-Fi firmware the kernel
+# image is ~314 MB, so the logs/PDFs/inventories of ~10 machines filled the drive and
+# later sessions were written as 0-byte or truncated files. Leave ~2 GB free instead.
+grep -q '^OFFSET=20000000$' board/shredos/make_img_file.sh
+sed -i 's/^OFFSET=20000000$/OFFSET=2000000000/' board/shredos/make_img_file.sh
+
 echo ">> Triple Re: hooks in nwipe_launcher"
 LAUNCHER=board/shredos/fsoverlay/usr/bin/nwipe_launcher
 insert_line "$LAUNCHER" before $'\t\tif [ $nwipe_options_flag == 0 ]' \
