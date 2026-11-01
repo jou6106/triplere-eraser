@@ -20,13 +20,15 @@ dialog --backtitle "$BACKTITLE" --title "Triple Re ERP" \
 result=$(final_line)
 
 if printf '%s' "$result" | grep -q 'Uploaded to ERP'; then
-    text="Reports uploaded to the Triple Re ERP.\n\nA copy is also saved on the USB drive."
+    text="Reports uploaded to the Triple Re ERP.\n\nA copy is also saved on the USB drive.\n\nIt is now safe to power off."
 else
-    text="The reports could not be uploaded now.\n\nThey are saved on the USB drive - upload them from the\n\"Data Erasure Certificates\" page in the ERP."
+    text="The reports could not be uploaded now.\n\nThey are saved on the USB drive - upload them from the\n\"Data Erasure Certificates\" page in the ERP.\n\nIt is now safe to power off."
 fi
 
-# Save the upload status file on the USB drive too.
-/usr/bin/archive_log.sh -w >/dev/null 2>&1
+# No second archive_log.sh here: nwipe_launcher already copied the logs and PDFs to the
+# USB drive, and copying them again meant a power-off during the copy truncated files
+# that were already safe (seen in the field: 0-byte logs and broken PDFs).
+sync
 
 dialog --backtitle "$BACKTITLE" --title "Triple Re ERP" --timeout 30 --msgbox "$text" 10 64 2>/dev/null \
     || printf '\n%b\n' "$text"
