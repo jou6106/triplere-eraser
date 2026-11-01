@@ -4,8 +4,7 @@
 case "$1" in
     start|"")
         /usr/bin/triplere_hw_inventory.sh
-        # Background uploader: waits for nwipe to finish, then sends the files to the ERP.
-        setsid /usr/bin/triplere_uploader.sh >/dev/null 2>&1 < /dev/null &
+        # The upload itself runs from triplere_postwipe.sh once nwipe exits.
         ;;
     *)
         ;;

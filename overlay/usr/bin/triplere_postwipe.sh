@@ -1,13 +1,12 @@
 #!/bin/bash
 # Triple Re post-wipe screen (runs on tty1 from nwipe_launcher after nwipe exits
 # and ShredOS has copied the logs/PDFs to the USB drive).
-# Waits for the background uploader and tells the technician where the reports went.
+# Uploads the reports now (foreground) and tells the technician where they went.
 
 STATUS=/nwipe_log_upload_status.txt
 BACKTITLE="Triple Re Eraser  |  NIST SP 800-88  |  nwipe / ShredOS"
-WAIT_SECONDS=180
 
-latest_log=$(ls -t /nwipe_log_2*.txt 2>/dev/null | head -n 1)
+latest_log=$(ls -t /nwipe_log_[0-9]*.txt 2>/dev/null | head -n 1)
 [ -n "$latest_log" ] || exit 0
 name=$(basename "$latest_log")
 
@@ -15,15 +14,10 @@ final_line() {
     grep -F "$name" "$STATUS" 2>/dev/null | grep -E 'Uploaded to ERP|saved on USB only' | tail -n 1
 }
 
-waited=0
+dialog --backtitle "$BACKTITLE" --title "Triple Re ERP" \
+    --infobox "Uploading the wipe reports to the Triple Re ERP...\n\nThis can take up to 2 minutes." 8 60 2>/dev/null
+/usr/bin/triplere_uploader.sh
 result=$(final_line)
-while [ -z "$result" ] && [ "$waited" -lt "$WAIT_SECONDS" ]; do
-    dialog --backtitle "$BACKTITLE" --title "Triple Re ERP" \
-        --infobox "Uploading the wipe reports to the Triple Re ERP...\n\n($waited s)" 8 60 2>/dev/null
-    sleep 3
-    waited=$((waited + 3))
-    result=$(final_line)
-done
 
 if printf '%s' "$result" | grep -q 'Uploaded to ERP'; then
     text="Reports uploaded to the Triple Re ERP.\n\nA copy is also saved on the USB drive."

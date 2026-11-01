@@ -1,10 +1,10 @@
 #!/bin/sh
 # Triple Re automatic upload for ShredOS.
 #
-# Runs in the background from boot. When nwipe finishes a wipe session (its log
-# gets the final "Total Throughput" line, written after the PDF reports), it
-# sends the nwipe log, the hardware inventory and the PDF reports to the
-# Triple Re ERP over HTTPS.
+# Run by triplere_postwipe.sh right after nwipe exits. Uploads every finished
+# session of this boot that was not uploaded yet, then exits. A session is
+# finished when its log has the summary ("Total Throughput", after an overwrite)
+# or a successful firmware sanitize (nwipe 0.43 writes no summary for those).
 #
 # Nothing here blocks or changes the wipe:
 #   - ShredOS still copies every log and PDF to the USB drive (archive_log.sh).
@@ -108,15 +108,13 @@ upload_session() {
     return 0
 }
 
-while true; do
-    # nwipe logs are nwipe_log_<date>.txt; the inventory file starts with nwipe_log_hwinventory_.
-    for log in "${ROOT}"/nwipe_log_2*.txt; do
-        [ -f "$log" ] || continue
-        already_done "$log" && continue
-        grep -q "Total Throughput" "$log" || continue
-        sleep 5
-        upload_session "$log"
-        echo "$log" >> "$DONE_LIST"
-    done
-    sleep 10
+# nwipe logs are nwipe_log_<date>.txt (any year: a dead CMOS clock gives 2019 or 1970);
+# the inventory and status files start with nwipe_log_hw / nwipe_log_up and are skipped.
+for log in "${ROOT}"/nwipe_log_[0-9]*.txt; do
+    [ -f "$log" ] || continue
+    already_done "$log" && continue
+    grep -qE "Total Throughput|SANITIZE action '[^']+' was successful" "$log" || continue
+    upload_session "$log"
+    echo "$log" >> "$DONE_LIST"
 done
+exit 0
