@@ -218,7 +218,8 @@ class LinuxIntegration(unittest.TestCase):
         try:
             with open("/etc/triplere/upload.conf", "w") as f:
                 f.write(good.replace(TOKEN, "tre_wrong"))
-            os.remove("/tmp/triplere_uploaded.list")
+            if os.path.exists("/tmp/triplere_uploaded.list"):
+                os.remove("/tmp/triplere_uploaded.list")
             logs = [os.path.join("/", os.path.basename(p)) for p in glob.glob("/sent/nwipe_log_[0-9]*.txt")]
             ok, reason = system.RealSystem().upload(logs)
             self.assertFalse(ok)

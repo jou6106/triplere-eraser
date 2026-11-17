@@ -156,6 +156,22 @@ FINISHED_RE = re.compile(r"Total Throughput|SANITIZE action '[^']+' was successf
 SUMMARY_RE = re.compile(r"^\s*!?\s*(\S+)\s+\|\s*(Erased|-FAILED-|UABORTED|INSANITY)\s*\|")
 
 
+def _usr1_handled(pid):
+    """True once the eraser has set up its signal thread (SIGUSR1 blocked, collected by sigwait).
+
+    Before that, SIGUSR1 still has its default action and would KILL the eraser: it only
+    sets the signal thread up after scanning the disks, which can take a while.
+    """
+    try:
+        with open(f"/proc/{pid}/status") as f:
+            for line in f:
+                if line.startswith("SigBlk:"):
+                    return bool(int(line.split()[1], 16) & (1 << (signal.SIGUSR1 - 1)))
+    except (OSError, ValueError):
+        pass
+    return False
+
+
 def _covers(path, name):
     """/dev/nvme0 (controller) covers nvme0n1; /dev/sda covers sda."""
     base = os.path.basename(path)
@@ -238,7 +254,7 @@ class WipeJob:
         last_usr1 = 0.0
         while True:
             alive = proc.poll() is None
-            if alive and usr1 and time.monotonic() - last_usr1 > PROGRESS_INTERVAL:
+            if alive and usr1 and time.monotonic() - last_usr1 > PROGRESS_INTERVAL and _usr1_handled(proc.pid):
                 last_usr1 = time.monotonic()
                 try:
                     proc.send_signal(signal.SIGUSR1)
