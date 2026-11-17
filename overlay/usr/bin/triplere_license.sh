@@ -93,3 +93,14 @@ license_renew() {
 
 CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 [ -r "$CA_BUNDLE" ] || CA_BUNDLE=""
+
+# ---- command mode for the graphical screens (not when sourced) ---------------------------
+#   triplere_license.sh state  -> valid | missing | invalid | expired
+#   triplere_license.sh renew  -> exit 0 renewed, 1 no answer, 2 key stopped (licence removed)
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    case "$1" in
+        state) license_state ;;
+        renew) license_renew; exit $? ;;
+        *) echo "usage: $0 state|renew" >&2; exit 2 ;;
+    esac
+fi

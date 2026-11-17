@@ -1,0 +1,62 @@
+#!/bin/bash
+# Triple Re graphical screens (network, licence, disks, erase, reports).
+#
+# Started by nwipe_launcher before its own loop. It only returns when the technician picks
+# "Classic screen" or the graphics cannot be used (no framebuffer, no input device, an
+# error); the launcher then shows the classic text screens, so a wipe is never blocked.
+#
+# Boot menu entry "classic screens" (triplere_gui=off on the kernel command line) skips it.
+
+LOG=/tmp/triplere_gui.log
+
+grep -qw 'triplere_gui=off' /proc/cmdline 2>/dev/null && exit 1
+[ -e /dev/fb0 ] || exit 1
+command -v python3 >/dev/null 2>&1 || exit 1
+
+restore_console() {
+    # Text mode back on the console and a sane terminal, whatever happened to the GUI.
+    python3 - <<'PY' 2>/dev/null
+import fcntl, os
+for path in ("/dev/tty0", "/proc/self/fd/0"):
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_NOCTTY)
+        fcntl.ioctl(fd, 0x4B3A, 0)  # KDSETMODE KD_TEXT
+        os.close(fd)
+    except OSError:
+        pass
+PY
+    stty sane 2>/dev/null
+    printf '\033[?25h\033[0m\033[H\033[2J'
+}
+
+eraser_running() {
+    local c
+    for c in /proc/[0-9]*/comm; do
+        [ "$(cat "$c" 2>/dev/null)" = "nwipe" ] && return 0
+    done
+    return 1
+}
+
+cd / || exit 1
+PYTHONPATH=/usr/lib/triplere python3 -m triplere_gui >>"$LOG" 2>&1
+rc=$?
+restore_console
+
+if [ "$rc" != 3 ]; then
+    printf '\n  Triple Re - the graphical screens stopped (code %s); switching to the classic screens.\n' "$rc"
+    tail -n 4 "$LOG" 2>/dev/null | cut -c1-150 | sed 's/^/    /'
+fi
+
+# If the GUI stopped while an erase it started was still running, let the erase finish,
+# then save and upload the reports exactly as after a classic-screen wipe.
+if eraser_running; then
+    printf '\n  Triple Re - an erase is still running. Do NOT power off. Please wait...\n'
+    while eraser_running; do sleep 5; done
+fi
+if ls /nwipe_log_[0-9]*.txt >/dev/null 2>&1 || ls /nwipe_report_*.pdf >/dev/null 2>&1; then
+    /usr/bin/archive_log.sh -w
+    sync
+    [ -x /usr/bin/triplere_postwipe.sh ] && /usr/bin/triplere_postwipe.sh
+fi
+sleep 2
+exit "$rc"

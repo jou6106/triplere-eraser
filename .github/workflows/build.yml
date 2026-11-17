@@ -10,13 +10,93 @@ concurrency:
   group: build
   cancel-in-progress: true
 
+env:
+  # ShredOS v2025.11_32_x86-64_0.43.1 (nwipe 0.43.1) — the release this build is based on.
+  SHREDOS_COMMIT: b2c99419bae6d19247911407d88bcec87c685e5f
+  LIBNVME_VERSION: "1.16.1"
+
 jobs:
+  # Everything that can be checked without the 3-5 hour image build: if any of it fails,
+  # the build does not start.
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Triple Re changes
+        uses: actions/checkout@v4
+        with:
+          path: triplere
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config automake autoconf autotools-dev libncurses5-dev \
+            libparted-dev libconfig-dev libconfig++-dev dmidecode smartmontools hdparm util-linux lshw \
+            meson ninja-build libjson-c-dev python3-pil poppler-utils dosfstools fdisk fonts-dejavu-core curl
+
+      - name: Fetch ShredOS source and apply the Triple Re changes
+        run: |
+          git init -q shredos
+          cd shredos
+          git remote add origin https://github.com/PartialVolume/shredos.x86_64.git
+          git fetch -q --depth 1 origin "$SHREDOS_COMMIT"
+          git checkout -q FETCH_HEAD
+          mkdir -p package/shredos && touch package/shredos/Config.in
+          cd ..
+          bash triplere/apply.sh shredos
+
+      - name: Unit tests (graphical screens, build sources)
+        env:
+          TRIPLERE_SHOTS: ${{ github.workspace }}/test-output/screens
+        run: |
+          cd triplere
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+
+      - name: Build libnvme ${{ env.LIBNVME_VERSION }} (same version as the image)
+        run: |
+          wget -q "https://github.com/linux-nvme/libnvme/archive/refs/tags/v${LIBNVME_VERSION}.tar.gz"
+          tar xzf "v${LIBNVME_VERSION}.tar.gz"
+          cd "libnvme-${LIBNVME_VERSION}"
+          meson setup .build >/dev/null
+          meson compile -C .build >/dev/null
+          sudo meson install -C .build >/dev/null
+          sudo ldconfig
+
+      - name: Build nwipe 0.43.1 with the Triple Re patch
+        run: |
+          git clone -q --depth 1 --branch v0.43.1 https://github.com/martijnvanbrummelen/nwipe.git nwipe
+          cd nwipe
+          for p in ../shredos/package/nwipe/*.patch; do patch -p1 --no-backup-if-mismatch < "$p"; done
+          ./autogen.sh >/dev/null 2>&1
+          ./configure CFLAGS='-O2 -g -Wall -Wextra' --with-libnvme >/dev/null
+          make -j"$(nproc)" 2>&1 | tee build.log | grep -E 'warning|error' || true
+          test -x src/nwipe
+          # the new code must build without warnings
+          if grep -E 'se_cli\.[ch]:[0-9]+:[0-9]+: (warning|error)' build.log; then
+            echo "::error::warnings in the Triple Re nwipe changes"; exit 1
+          fi
+          ./src/nwipe --help | grep -q -- '--nogui'
+
+      - name: Integration test (real eraser on loop disks, ShredOS scripts, upload)
+        env:
+          OUT: ${{ github.workspace }}/test-output/integration
+        run: |
+          sudo -E env TRIPLERE_NWIPE="$PWD/nwipe/src/nwipe" SHREDOS_TREE="$PWD/shredos" OUT="$OUT" \
+            PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v triplere/tests/integration/test_linux.py
+          sudo chown -R "$(id -u)" test-output
+
+      - name: Keep test output (screens, PDF reports, logs)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test-output/
+          retention-days: 14
+
   build:
+    needs: test
     runs-on: ubuntu-24.04
     timeout-minutes: 350
-    env:
-      # ShredOS v2025.11_32_x86-64_0.43.1 (nwipe 0.43.1) — the release this build is based on.
-      SHREDOS_COMMIT: b2c99419bae6d19247911407d88bcec87c685e5f
     steps:
       - name: Checkout Triple Re changes
         uses: actions/checkout@v4
@@ -60,7 +140,7 @@ jobs:
         run: bash triplere/apply.sh shredos
 
       - name: Test source preparation fixes
-        run: python3 -m unittest discover -s triplere/tests -v
+        run: python3 -m unittest -v triplere/tests/test_build_sources.py
 
       - name: Configure
         run: |
@@ -73,7 +153,7 @@ jobs:
             grep -qxF "$opt" .config || { echo "::error::Buildroot option not applied: $opt"; missing=1; }
           done < ../triplere/config/defconfig.fragment
           # Options that must stay off (written as "# ... is not set" in the fragment).
-          for opt in BR2_PACKAGE_MESA3D BR2_PACKAGE_LLVM BR2_PACKAGE_HOST_CLANG BR2_CCACHE; do
+          for opt in BR2_PACKAGE_MESA3D BR2_PACKAGE_LLVM BR2_PACKAGE_HOST_CLANG BR2_CCACHE BR2_PACKAGE_XORG7; do
             if grep -q "^${opt}=y" .config; then echo "::error::$opt must be disabled"; missing=1; fi
           done
           exit $missing
@@ -112,11 +192,26 @@ jobs:
           if [ "$status" -ne 0 ]; then tail -n 80 build.log; exit 1; fi
           ls -la output/images/
 
+      - name: Check the graphical screens are in the image
+        run: |
+          cd shredos/output/target
+          test -f usr/lib/triplere/triplere_gui/app.py
+          test -x usr/bin/triplere_gui
+          ls usr/lib/python3*/site-packages/PIL/_imagingft*.so
+          ls usr/share/fonts/dejavu/DejaVuSans.ttf usr/share/fonts/dejavu/DejaVuSans-Bold.ttf
+          test -f etc/nwipe/logo.jpg
+          ./usr/bin/nwipe --help >/dev/null 2>&1 || true
+          strings usr/bin/nwipe | grep -q 'Disk Erasure by Triple Re Eraser'
+          strings usr/bin/nwipe | grep -q -- 'sanitize must be used with --nogui'
+          if strings usr/bin/nwipe | grep -q 'Disc Erasure by NWIPE'; then echo "::error::old report footer"; exit 1; fi
+
       - name: Package image
         run: |
           mkdir -p release
-          cp shredos/output/images/shredos*.img release/
           cd release
+          # Named after Triple Re, not after the tool it is built from.
+          src=$(ls ../shredos/output/images/shredos*.img | head -n 1)
+          cp "$src" "TripleRe-Eraser-$(date +%Y%m%d).img"
           for f in *.img; do sha256sum "$f" > "$f.sha256"; done
           ls -la
 
@@ -138,3 +233,38 @@ jobs:
             shredos/build.log
             shredos/download-attempt-*.log
           retention-days: 7
+
+  # Boots the finished image in QEMU and drives the graphical screens with keyboard and mouse.
+  smoke:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout Triple Re changes
+        uses: actions/checkout@v4
+        with:
+          path: triplere
+
+      - name: Download the image
+        uses: actions/download-artifact@v4
+        with:
+          name: triplere-eraser-img
+          path: release
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 qemu-utils python3-pil
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+
+      - name: Boot the image and use the graphical screens
+        run: python3 triplere/tests/qemu/smoke.py "$(ls release/*.img | head -n 1)" smoke-output
+
+      - name: Keep the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-test-screens
+          path: smoke-output/
+          retention-days: 14

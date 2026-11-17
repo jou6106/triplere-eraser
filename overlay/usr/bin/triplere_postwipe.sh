@@ -4,9 +4,10 @@
 # Uploads the reports now (foreground) and tells the technician where they went.
 
 STATUS=/nwipe_log_upload_status.txt
-BACKTITLE="Triple Re Eraser  |  NIST SP 800-88  |  nwipe / ShredOS"
+BACKTITLE="Triple Re Eraser  |  NIST SP 800-88"
 
-latest_log=$(ls -t /nwipe_log_[0-9]*.txt 2>/dev/null | head -n 1)
+# archive_log.sh -w has already moved the copied logs from / to /sent.
+latest_log=$(ls -t /nwipe_log_[0-9]*.txt /sent/nwipe_log_[0-9]*.txt 2>/dev/null | head -n 1)
 [ -n "$latest_log" ] || exit 0
 name=$(basename "$latest_log")
 

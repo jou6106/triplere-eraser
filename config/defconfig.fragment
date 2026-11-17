@@ -60,3 +60,15 @@ BR2_PACKAGE_LINUX_FIRMWARE_MEDIATEK_MT7922=y
 BR2_PACKAGE_LINUX_FIRMWARE_MEDIATEK_MT7925=y
 BR2_PACKAGE_LINUX_FIRMWARE_BRCM_BCM43XX=y
 BR2_PACKAGE_LINUX_FIRMWARE_BRCM_BCM43XXX=y
+
+# Triple Re name instead of ShredOS on the console and on the network (DHCP host name)
+BR2_TARGET_GENERIC_HOSTNAME="triplere"
+BR2_TARGET_GENERIC_ISSUE="Triple Re Eraser"
+
+# Graphical screens: Python + Pillow drawing on the kernel framebuffer (/dev/fb0).
+# No X server / Wayland / Mesa: these are small packages (minutes, not hours, to build).
+BR2_PACKAGE_PYTHON3=y
+BR2_PACKAGE_PYTHON_PILLOW=y
+BR2_PACKAGE_FREETYPE=y
+BR2_PACKAGE_DEJAVU=y
+BR2_PACKAGE_DEJAVU_SANS=y
