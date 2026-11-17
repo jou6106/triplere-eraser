@@ -69,14 +69,16 @@ jobs:
           for p in ../shredos/package/nwipe/*.patch; do patch -p1 --no-backup-if-mismatch < "$p"; done
           ./autogen.sh >/dev/null 2>&1
           ./configure CFLAGS='-O2 -g -Wall -Wextra' --with-libnvme >/dev/null
-          make -j"$(nproc)" 2>&1 | tee build.log | grep -E 'warning|error' || true
-          test -x src/nwipe
+          make -j"$(nproc)" > build.log 2>&1 || { tail -n 60 build.log; echo "::error::nwipe did not build"; exit 1; }
+          echo "warnings (all from upstream code): $(grep -c 'warning:' build.log)"
+          ls -la src/nwipe
           # the new code must build without warnings
           if grep -E 'se_cli\.[ch]:[0-9]+:[0-9]+: (warning|error)' build.log; then
             echo "::error::warnings in the Triple Re nwipe changes"; exit 1
           fi
-          ./src/nwipe --help > help.txt 2>&1 || true
-          grep -q -- '--nogui' help.txt
+          sudo ./src/nwipe --help > help.txt 2>&1 || true
+          head -n 5 help.txt
+          grep -q -- 'nogui' help.txt || { echo "::error::nwipe --help did not run"; cat help.txt | head -n 30; exit 1; }
 
       - name: Integration test (real eraser on loop disks, ShredOS scripts, upload)
         env:
