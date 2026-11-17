@@ -75,7 +75,8 @@ jobs:
           if grep -E 'se_cli\.[ch]:[0-9]+:[0-9]+: (warning|error)' build.log; then
             echo "::error::warnings in the Triple Re nwipe changes"; exit 1
           fi
-          ./src/nwipe --help | grep -q -- '--nogui'
+          ./src/nwipe --help > help.txt 2>&1 || true
+          grep -q -- '--nogui' help.txt
 
       - name: Integration test (real eraser on loop disks, ShredOS scripts, upload)
         env:
