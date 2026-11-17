@@ -115,9 +115,11 @@ fi
 echo ">> Triple Re: room for reports on the USB drive"
 # ShredOS sizes the FAT partition as bzImage + 20 MB. With the Wi-Fi firmware the kernel
 # image is ~314 MB, so the logs/PDFs/inventories of ~10 machines filled the drive and
-# later sessions were written as 0-byte or truncated files. Leave ~2 GB free instead.
+# later sessions were written as 0-byte or truncated files. Leave ~4 GB free instead
+# (the .img is then ~4.4 GB: use USB drives of 8 GB or more).
 grep -q '^OFFSET=20000000$' board/shredos/make_img_file.sh
-sed -i 's/^OFFSET=20000000$/OFFSET=2000000000/' board/shredos/make_img_file.sh
+sed -i 's/^OFFSET=20000000$/OFFSET=4000000000/' board/shredos/make_img_file.sh
+grep -q '^OFFSET=4000000000$' board/shredos/make_img_file.sh
 
 echo ">> Triple Re: hooks in nwipe_launcher"
 LAUNCHER=board/shredos/fsoverlay/usr/bin/nwipe_launcher
