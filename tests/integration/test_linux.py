@@ -155,7 +155,13 @@ class LinuxIntegration(unittest.TestCase):
             self.assertEqual(st.result, "erased", f"{st.disk.name}: {st.result} {st.detail}")
         self.assertTrue(job.states[disks[0].name].fell_back, "SSD without firmware erase must fall back")
         self.assertTrue(any(stage == "Writing" for _n, stage in seen), f"no write progress parsed: {seen}")
-        self.assertTrue(any(stage == "Verifying" for _n, stage in seen), f"no verify progress parsed: {seen}")
+        # The verify pass of these small disks can be over between two progress requests, so the
+        # verify line (same format, real nwipe wording) is checked directly instead of by timing.
+        probe = system.WipeJob([disks[1]], "overwrite")
+        probe._parse_overwrite(f"[2026/11/17 10:00:00]    info: /dev/{disks[1].name}: 63.50%, round 1 of 1, "
+                               "pass 2 of 2, eta 00:01:10, [verifying]>")
+        st = probe.states[disks[1].name]
+        self.assertEqual((st.stage, round(st.fraction, 3), st.eta), ("Verifying (pass 2 of 2)", 0.635, "0:01:10"))
         for dev in self.disks:
             self.assertTrue(zeros(dev), f"{dev} is not all zeros after the erase")
 
