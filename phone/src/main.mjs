@@ -9,7 +9,9 @@ import { createServer } from './server.mjs';
 import * as station from './station.mjs';
 import { appLog } from './util.mjs';
 
-const URL_ = `http://127.0.0.1:${PORT}/`;
+// Windows can reserve port ranges (Hyper-V/WSL); if ours is taken by something else, use the next one.
+const PORTS = process.env.TRIPLERE_PORT ? [PORT] : [PORT, PORT + 10000, PORT + 20000];
+let URL_ = `http://127.0.0.1:${PORT}/`;
 const noWindow = process.env.TRIPLERE_NO_WINDOW === '1' || process.argv.includes('--no-window');
 
 function edgePath() {
@@ -55,32 +57,46 @@ function onWindowClosed() {
   }
 }
 
-async function alreadyRunning() {
+async function alreadyRunning(port) {
   try {
-    const r = await fetch(`${URL_}api/state`, { signal: AbortSignal.timeout(3000) });
-    return r.ok;
+    const r = await fetch(`http://127.0.0.1:${port}/api/state`, { signal: AbortSignal.timeout(3000) });
+    return r.ok && 'licence' in await r.json();
   } catch { return false; }
+}
+
+function listen(port) {
+  return new Promise((resolve) => {
+    const server = createServer(port);
+    server.once('error', (e) => resolve({ error: e }));
+    server.listen(port, '127.0.0.1', () => resolve({ server }));
+  });
 }
 
 async function main() {
   ensureDirs();
   appLog(`${PRODUCT} ${VERSION} starting`, { data: DATA_DIR });
-  const server = createServer(PORT);
-  server.on('error', async (e) => {
-    if (e.code === 'EADDRINUSE' && await alreadyRunning()) {
+  for (const port of PORTS) {
+    if (await alreadyRunning(port)) {
+      URL_ = `http://127.0.0.1:${port}/`;
+      appLog(`already running on ${URL_}, opening a window`);
       openWindow();
       setTimeout(() => process.exit(0), 500);
       return;
     }
-    appLog('server error', e);
-    process.stderr.write(`cannot listen on 127.0.0.1:${PORT}: ${e.message}\n`);
-    process.exit(1);
-  });
-  server.listen(PORT, '127.0.0.1', () => {
-    appLog(`listening on ${URL_}`);
-    station.start();
-    openWindow();
-  });
+  }
+  for (const port of PORTS) {
+    const { server, error } = await listen(port);
+    if (server) {
+      URL_ = `http://127.0.0.1:${port}/`;
+      appLog(`listening on ${URL_}`);
+      station.start();
+      openWindow();
+      return;
+    }
+    appLog(`port ${port} not usable`, error.code || error.message);
+  }
+  process.stderr.write(`cannot listen on 127.0.0.1 ports ${PORTS.join(', ')}\n`);
+  process.exit(1);
 }
 
 process.on('uncaughtException', (e) => appLog('uncaught', e));
