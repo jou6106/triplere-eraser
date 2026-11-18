@@ -1,0 +1,120 @@
+name: Triple Re Mobile Eraser (Windows)
+
+on:
+  push:
+    branches: [phone-eraser]
+    paths: ['phone/**', '.github/workflows/phone.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Station tests (simulated iPhone / iPad / Samsung, mock ERP, licence)
+        run: node --test --test-concurrency=1 phone/tests/station.test.mjs
+      - name: Screenshots of every screen
+        run: node phone/tests/screens.mjs phone-screens
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: screens-${{ matrix.os }}
+          path: phone-screens
+
+  ios-tools:
+    name: iPhone tools for Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: ios-tools
+          key: ios-tools-${{ hashFiles('phone/build/build-ios-tools.sh', 'phone/build/recovery-list.c') }}
+      - uses: msys2/setup-msys2@v2
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel git make libtool autoconf automake-wrapper pkg-config
+            mingw-w64-x86_64-gcc mingw-w64-x86_64-pkg-config mingw-w64-x86_64-openssl mingw-w64-x86_64-curl
+            mingw-w64-x86_64-libzip mingw-w64-x86_64-zlib mingw-w64-x86_64-readline
+      - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: msys2 {0}
+        run: bash phone/build/build-ios-tools.sh "$(cygpath -u "$GITHUB_WORKSPACE")/ios-tools"
+      - name: Tools start outside MSYS2 (all DLLs shipped)
+        shell: pwsh
+        run: |
+          $env:PATH = "C:\Windows\System32;C:\Windows"
+          foreach ($t in 'idevice_id','ideviceinfo','idevicepair','ideviceenterrecovery','idevicerestore','triplere-recovery-list') {
+            $o = & ".\ios-tools\$t.exe" --help 2>&1 | Out-String
+            if ($o -notmatch 'Usage') { throw "$t did not start: $o" }
+            Write-Host "ok $t"
+          }
+      - uses: actions/upload-artifact@v5
+        with:
+          name: ios-tools
+          path: ios-tools
+
+  package:
+    name: Setup.exe + install test
+    needs: [test, ios-tools]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v5
+        with:
+          name: ios-tools
+          path: ios-tools
+      - name: Android tools and resource editor
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://dl.google.com/android/repository/platform-tools-latest-windows.zip -OutFile pt.zip
+          Expand-Archive pt.zip -DestinationPath .
+          Invoke-WebRequest https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe -OutFile rcedit.exe
+      - name: Build the program
+        shell: pwsh
+        run: node phone/build/make-app.mjs "$PWD\ios-tools" "$PWD\platform-tools" "$PWD\rcedit.exe"
+      - name: Build Setup.exe
+        shell: pwsh
+        run: |
+          $iscc = Get-Command iscc.exe -ErrorAction SilentlyContinue
+          if (-not $iscc) {
+            $p = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            if (-not (Test-Path $p)) { choco install innosetup -y --no-progress | Out-Null }
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          } else { $iscc = $iscc.Source }
+          $ver = (Select-String -Path phone/src/config.mjs -Pattern "VERSION = '([\d.]+)'").Matches[0].Groups[1].Value
+          & $iscc "/DAppVersion=$ver" "/DSourceDir=$PWD\phone\dist\app" "/DOutputDir=$PWD\phone\dist" phone\build\installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'iscc failed' }
+          Get-ChildItem phone\dist\*.exe
+      - name: Install, run and uninstall on this Windows machine
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem phone\dist\TripleRe-Mobile-Eraser-Setup-*.exe).FullName
+          ./phone/build/smoke.ps1 -Setup $setup -Out "$PWD\smoke"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: smoke-test
+          path: smoke
+      - uses: actions/upload-artifact@v5
+        with:
+          name: TripleRe-Mobile-Eraser-Setup
+          path: phone/dist/TripleRe-Mobile-Eraser-Setup-*.exe

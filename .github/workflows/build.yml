@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ['**.md', 'usb/**']
+    paths-ignore: ['**.md', 'usb/**', 'phone/**', '.github/workflows/phone.yml']
 
 concurrency:
   group: build
