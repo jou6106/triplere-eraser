@@ -401,3 +401,42 @@ class GuiFlowTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FramebufferWriteTest(unittest.TestCase):
+    """Pixels reach /dev/fb0 through write() (KMS drivers only refresh written ranges)."""
+
+    def _display(self, path, width, height, stride):
+        from triplere_gui.display import FramebufferDisplay
+
+        d = FramebufferDisplay.__new__(FramebufferDisplay)
+        ImageDisplay.__bases__[0].__init__(d)
+        d.width, d.height, d.stride, d.bytespp, d.rawmode = width, height, stride, 4, "BGRX"
+        d.origin, d.use_write, d.tty_fd = 0, True, None
+        d.fd = os.open(path, os.O_RDWR)
+        d.mem = None
+        return d
+
+    def test_full_frame_and_region_with_padded_rows(self):
+        import tempfile
+
+        w, h, stride = 8, 4, 40  # 8 px * 4 bytes = 32, plus 8 bytes of row padding
+        with tempfile.NamedTemporaryFile() as tmp:
+            tmp.write(b"\xee" * stride * h)
+            tmp.flush()
+            d = self._display(tmp.name, w, h, stride)
+            try:
+                d.present(Image.new("RGB", (w, h), (10, 20, 30)))
+                d._write_image(2, 1, Image.new("RGB", (3, 2), (200, 100, 50)))
+            finally:
+                os.close(d.fd)
+            with open(tmp.name, "rb") as f:
+                buf = f.read()
+        self.assertTrue(d.use_write)
+        for y in range(h):
+            line = buf[y * stride:(y + 1) * stride]
+            self.assertEqual(line[32:], b"\xee" * 8, "row padding must be left alone")
+            for x in range(w):
+                px = line[x * 4:x * 4 + 3]
+                inside = 2 <= x < 5 and 1 <= y < 3
+                self.assertEqual(px, bytes((50, 100, 200)) if inside else bytes((30, 20, 10)), (x, y))

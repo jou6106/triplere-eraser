@@ -13,7 +13,9 @@ if (!iosTools || !androidTools || !rcedit) throw new Error('usage: make-app.mjs 
 const VERSION = fs.readFileSync(path.join(PHONE, 'src', 'config.mjs'), 'utf8').match(/VERSION = '([\d.]+)'/)[1];
 const BUILD = path.join(PHONE, 'dist', 'build');
 const APP = path.join(PHONE, 'dist', 'app');
-const EXE = path.join(APP, 'Triple Re Mobile Eraser.exe');
+const FINAL_EXE = path.join(APP, 'Triple Re Mobile Eraser.exe');
+// Built under a name without spaces (the npx tools run through the Windows shell), renamed at the end.
+const EXE = path.join(BUILD, 'TripleReMobileEraser.exe');
 const sh = (cmd, args, opts = {}) => { console.log('>', cmd, args.join(' ')); execFileSync(cmd, args, { stdio: 'inherit', shell: false, ...opts }); };
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
@@ -66,6 +68,7 @@ sh(npx, ['--yes', 'postject@1.0.0-alpha.6', EXE, 'NODE_SEA_BLOB', path.join(BUIL
   buf.writeUInt16LE(2, sub);
   fs.writeFileSync(EXE, buf);
 }
+fs.copyFileSync(EXE, FINAL_EXE);
 
 // 3. Files next to the program.
 const copyDir = (from, to, filter = () => true) => {
@@ -92,4 +95,4 @@ for (const n of ['NOTICE.txt', 'NOTICE']) {
 }
 const runtimeLicence = path.join(path.dirname(process.execPath), 'LICENSE');
 if (fs.existsSync(runtimeLicence)) fs.copyFileSync(runtimeLicence, path.join(APP, 'licenses', 'runtime-LICENSE.txt'));
-console.log(`built ${EXE} (${VERSION})`);
+console.log(`built ${FINAL_EXE} (${VERSION})`);

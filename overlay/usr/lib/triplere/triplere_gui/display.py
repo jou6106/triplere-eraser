@@ -9,6 +9,7 @@ import fcntl
 import mmap
 import os
 import struct
+import sys
 
 from PIL import Image
 
@@ -152,6 +153,17 @@ class FramebufferDisplay(BaseDisplay):
         if self.origin + self.stride * (self.height - 1) + self.width * self.bytespp > size:
             self.close()
             raise RuntimeError("framebuffer geometry does not fit its memory")
+        # Pixels go in with write(), not through the mmap. KMS drivers (i915, amdgpu,
+        # nouveau...) only refresh the screen for written ranges: a laptop panel with
+        # self-refresh (PSR) keeps showing the old picture when the memory is changed
+        # behind the driver's back. The mmap stays as a fallback if write() is refused.
+        self.use_write = True
+        self.fb_name = f[:16].split(b"\0", 1)[0].decode("ascii", "replace")
+        sys.stderr.write(
+            f"framebuffer {path}: {self.fb_name!r} {self.width}x{self.height} {bpp}bpp "
+            f"stride {self.stride} offset {self.xoff},{self.yoff} mem {size}\n"
+        )
+        sys.stderr.flush()
 
         # Stop the text console from drawing over the picture (restored in close()).
         self.tty_fd = None
@@ -175,12 +187,34 @@ class FramebufferDisplay(BaseDisplay):
         data = img.tobytes("raw", self.rawmode)
         row = img.width * self.bytespp
         start = self.origin + y0 * self.stride + x0 * self.bytespp
+        if self.use_write:
+            try:
+                self._pwrite_rows(data, row, start, img.height)
+                return
+            except OSError as e:
+                self.use_write = False
+                sys.stderr.write(f"framebuffer write() refused ({e}); drawing through mmap\n")
+                sys.stderr.flush()
         if x0 == 0 and img.width == self.width and row == self.stride:
             self.mem[start:start + len(data)] = data
             return
         for y in range(img.height):
             off = start + y * self.stride
             self.mem[off:off + row] = data[y * row:(y + 1) * row]
+
+    def _pwrite_rows(self, data, row, start, rows):
+        view = memoryview(data)
+        if row == self.stride:
+            chunks = [(start, view)]
+        else:
+            chunks = [(start + y * self.stride, view[y * row:(y + 1) * row]) for y in range(rows)]
+        for off, chunk in chunks:
+            while len(chunk):
+                n = os.pwrite(self.fd, chunk, off)
+                if n <= 0:
+                    raise OSError("short write to the framebuffer")
+                chunk = chunk[n:]
+                off += n
 
     def close(self):
         if self.tty_fd is not None:
