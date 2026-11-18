@@ -44,7 +44,7 @@ async function readAdbInfo(d) {
   const s = d.adbSerial;
   const all = parseGetprop((await run('adb', ['-s', s, 'shell', 'getprop'])).out);
   if (!all['ro.serialno'] && !all['ro.product.model']) return;
-  d.raw.props = PROPS.filter((k) => all[k] !== undefined).map((k) => `${k}: ${all[k]}`).join('\n');
+  const props = PROPS.filter((k) => all[k] !== undefined).map((k) => `${k}: ${all[k]}`).join('\n');
   const acc = (await run('adb', ['-s', s, 'shell', 'dumpsys', 'account'])).out;
   const types = [...acc.matchAll(/Account \{name=[^,]*, type=([^}]+)\}/g)].map((m) => m[1].trim());
   const google = new Set(), samsung = new Set();
@@ -56,14 +56,17 @@ async function readAdbInfo(d) {
   const model = all['ro.product.model'] || d.info.model;
   const market = all['ro.product.marketname'] || all['ro.product.vendor.marketname'] || '';
   const cryptoState = all['ro.crypto.state'] || '';
+  const imei = d.info.imei || await readImei(d.adbSerial);
+  // Everything is read first and shown at once, so the screen never sees half a device.
+  d.raw.props = props;
   Object.assign(d.info, {
+    imei,
     serial: all['ro.serialno'] || d.info.serial, manufacturer, model,
     name: market || [manufacturer && manufacturer[0].toUpperCase() + manufacturer.slice(1), model].filter(Boolean).join(' '),
     os: all['ro.build.version.release'] ? `Android ${all['ro.build.version.release']}` : d.info.os,
     encryption: cryptoState === 'encrypted' ? `encrypted${all['ro.crypto.type'] ? ` (${all['ro.crypto.type']})` : ''}` : (cryptoState || 'unknown'),
     accounts: { google: google.size, samsung: samsung.size, total: types.length },
   });
-  d.info.imei = d.info.imei || await readImei(d.adbSerial);
 }
 
 // Best effort: readable from the shell on many phones, not on all.
