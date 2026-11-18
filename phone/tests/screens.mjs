@@ -2,6 +2,7 @@
 // with simulated devices and the mock ERP. Usage: node phone/tests/screens.mjs <out-dir> [chrome-path]
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { World, confText, mockErp, startStation, testKeys, tmpdir } from './helpers.mjs';
 
@@ -48,7 +49,7 @@ const data = tmpdir('screens');
 const world = new World(data);
 world.update((w) => { w.slowRestore = 900; });
 const st = await startStation({ data, world, keys, erp });
-const dbg = 9333 + Math.floor(Math.random() * 300);
+const dbg = await new Promise((r) => { const s = http.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
 const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${dbg}`, '--window-size=1280,860', '--hide-scrollbars',
   `--user-data-dir=${tmpdir('chrome')}`, '--no-first-run', '--lang=ar', `${st.base}/`], { stdio: 'ignore' });
 const page = await cdp(dbg);

@@ -108,10 +108,17 @@ export class World {
 }
 
 // ------------------------------------------------------------------ station process
-let nextPort = 46000 + Math.floor(Math.random() * 1000);
+// A port the system says is free (Windows reserves ranges that a fixed choice can hit).
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = http.createServer();
+    s.once('error', reject);
+    s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
+  });
+}
 
 export async function startStation({ data, world, keys, erp, env = {} }) {
-  const port = nextPort++;
+  const port = await freePort();
   const proc = spawn(process.execPath, [path.join(PHONE, 'src', 'main.mjs')], {
     env: {
       ...process.env, TRIPLERE_DATA: data, TRIPLERE_FAKE_TOOLS: FAKE, TRIPLERE_FAKE_WORLD: world.file, TRIPLERE_PORT: String(port),

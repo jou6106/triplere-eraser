@@ -73,6 +73,7 @@ async function main() {
       return;
     }
     appLog('server error', e);
+    process.stderr.write(`cannot listen on 127.0.0.1:${PORT}: ${e.message}\n`);
     process.exit(1);
   });
   server.listen(PORT, '127.0.0.1', () => {
