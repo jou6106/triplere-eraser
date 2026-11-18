@@ -152,7 +152,14 @@ upload_session() {
 for log in $(list_files 'nwipe_log_[0-9]*.txt'); do
     [ -f "$log" ] || continue
     already_done "$log" && continue
-    grep -qE "Total Throughput|SANITIZE action '[^']+' was successful" "$log" || continue
+    # "has completed": the classic sanitize screen got no explicit success or failure from
+    # the drive and counts it as a success (its PDF says so), so it is a finished session too.
+    if ! grep -qE "Total Throughput|SANITIZE action '[^']+' (was successful|has completed)" "$log"; then
+        # Say why on the post-wipe screen instead of a silent skip (once per log).
+        grep -qF "Erase not finished - nothing to upload: $(basename "$log")" "$STATUS" 2>/dev/null \
+            || status "Erase not finished - nothing to upload: $(basename "$log")"
+        continue
+    fi
     before=$(grep -c . "$STATUS" 2>/dev/null || echo 0)
     upload_session "$log"
     # Only a successful upload is final; anything else is retried on the next run.

@@ -240,6 +240,27 @@ class LinuxIntegration(unittest.TestCase):
             with open("/etc/triplere/upload.conf", "w") as f:
                 f.write(good)
 
+    def test_3b_classic_sanitize_completed_uploads_and_unfinished_is_explained(self):
+        # Classic sanitize screen: the drive gave no explicit result, nwipe logs "has completed"
+        # and counts it as a success - the uploader used to skip it without a word.
+        done = "/sent/nwipe_log_2026-11-18_14-00-00.txt"
+        unfinished = "/sent/nwipe_log_2026-11-18_15-00-00.txt"
+        with open(done, "w") as f:
+            f.write("[2026/11/18 14:00:00] info: /dev/nvme0: SANITIZE action 'Crypto Erase' has completed.\n")
+        with open(unfinished, "w") as f:
+            f.write("[2026/11/18 15:00:00] info: nwipe started, no erase\n")
+        before = len(open(RECORD).read().splitlines()) if os.path.exists(RECORD) else 0
+        try:
+            for _ in range(2):
+                subprocess.run(["/usr/bin/triplere_uploader.sh"], timeout=120)
+            status = open("/nwipe_log_upload_status.txt").read()
+            self.assertIn("Uploaded to ERP: " + os.path.basename(done), status)
+            self.assertEqual(status.count("Erase not finished - nothing to upload: " + os.path.basename(unfinished)), 1)
+            self.assertGreater(len(open(RECORD).read().splitlines()), before)
+        finally:
+            os.remove(done)
+            os.remove(unfinished)
+
     # ------------------------------------------------------------------ 4
     def test_4_licence_check(self):
         d = "/tmp/lic"
